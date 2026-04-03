@@ -1,0 +1,27 @@
+name: civicsetu_flutter
+description: CIVICSETU mobile app rebuilt in Flutter for Android.
+publish_to: "none"
+version: 1.0.3+4
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  camera: any
+  flutter_map: any
+  geolocator: any
+  image_picker: any
+  latlong2: any
+  shared_preferences: any
+  speech_to_text: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

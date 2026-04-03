@@ -1,0 +1,42 @@
+# Legacy web artifacts
+node_modules/
+dist/
+
+# Environment and secrets
+.env
+.env.*
+*.jks
+*.keystore
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local root caches
+.dart_tool_appdata/
+.dart_tool_home/
+.gradle-home/
+.gradle-home-ml/
+.pub-cache/
+
+# Mobile build outputs
+*.apk
+*.aab
+
+# Flutter project generated files
+civicsetu_flutter/.dart_tool/
+civicsetu_flutter/.dart_tool_appdata/
+civicsetu_flutter/.dart_tool_home/
+civicsetu_flutter/.flutter-plugins
+civicsetu_flutter/.flutter-plugins-dependencies
+civicsetu_flutter/.gradle-home/
+civicsetu_flutter/.metadata
+civicsetu_flutter/.packages
+civicsetu_flutter/.pub-cache/
+civicsetu_flutter/.pub/
+civicsetu_flutter/android/.gradle/
+civicsetu_flutter/android/.kotlin/
+civicsetu_flutter/android/local.properties
+civicsetu_flutter/build/
