@@ -487,6 +487,33 @@ double calculateIssueRatingScore(int upvotes, int downvotes) {
   return roundToSingleDecimal((upvotes / totalVotes) * 5);
 }
 
+IssueCategory issueCategoryFromKey(String value) {
+  switch (value.trim().toLowerCase()) {
+    case 'road':
+      return IssueCategory.road;
+    case 'water':
+      return IssueCategory.water;
+    case 'electricity':
+      return IssueCategory.electricity;
+    case 'sanitation':
+      return IssueCategory.sanitation;
+    default:
+      return IssueCategory.road;
+  }
+}
+
+UrgencyTag urgencyTagFromKey(String value) {
+  switch (value.trim().toLowerCase()) {
+    case 'low':
+      return UrgencyTag.low;
+    case 'medium':
+      return UrgencyTag.medium;
+    case 'high':
+    default:
+      return UrgencyTag.high;
+  }
+}
+
 bool isNetworkResource(String value) =>
     value.startsWith('http://') || value.startsWith('https://');
 

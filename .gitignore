@@ -7,6 +7,8 @@ dist/
 .env.*
 *.jks
 *.keystore
+backend/auto-report-proxy/.env
+backend/auto-report-proxy/.env.*
 
 # OS and editor files
 .DS_Store
@@ -19,6 +21,7 @@ Thumbs.db
 .dart_tool_home/
 .gradle-home/
 .gradle-home-ml/
+.gradle-home-ai/
 .pub-cache/
 
 # Mobile build outputs
@@ -40,3 +43,6 @@ civicsetu_flutter/android/.gradle/
 civicsetu_flutter/android/.kotlin/
 civicsetu_flutter/android/local.properties
 civicsetu_flutter/build/
+
+# AI backend
+backend/auto-report-proxy/node_modules/

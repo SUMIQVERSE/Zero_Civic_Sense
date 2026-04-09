@@ -112,7 +112,13 @@ class _AuthorityPortalScreenState extends State<AuthorityPortalScreen> {
                           child: ListTile(
                             title: Text(widget.l10n.stateName(rating.state)),
                             subtitle: Text(
-                              '${rating.resolutionRate}% resolved - ${rating.trustRate}% trust',
+                              widget.l10n.t(
+                                'authority.resolutionTrustSummary',
+                                {
+                                  'resolved': rating.resolutionRate,
+                                  'trust': rating.trustRate,
+                                },
+                              ),
                             ),
                             trailing: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -124,7 +130,9 @@ class _AuthorityPortalScreenState extends State<AuthorityPortalScreen> {
                                   ),
                                 ),
                                 Text(
-                                  rating.qualityBand,
+                                  widget.l10n.qualityBandLabel(
+                                    rating.qualityBand,
+                                  ),
                                   style: Theme.of(context).textTheme.labelSmall,
                                 ),
                               ],
@@ -191,13 +199,13 @@ class _AuthorityPortalScreenState extends State<AuthorityPortalScreen> {
                 ),
                 const SizedBox(height: 8),
                 if (bids.isEmpty)
-                  const Text('No bids yet.')
+                  Text(widget.l10n.t('authority.noBidsYet'))
                 else
                   ...bids.map(
                     (bid) => ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                        '${bid.contractorName} - Rs ${bid.bidAmount.toStringAsFixed(0)}',
+                        '${bid.contractorName} - ${widget.l10n.rupeesLabel(bid.bidAmount.toStringAsFixed(0))}',
                       ),
                       subtitle: Text(bid.proposalNote),
                       trailing: bid.status == 'submitted'
@@ -209,7 +217,7 @@ class _AuthorityPortalScreenState extends State<AuthorityPortalScreen> {
                               ),
                               child: Text(widget.l10n.t('authority.selectBid')),
                             )
-                          : Text(bid.status),
+                          : Text(widget.l10n.workflowStatusLabel(bid.status)),
                     ),
                   ),
               ],
@@ -271,7 +279,7 @@ class _AuthorityPortalScreenState extends State<AuthorityPortalScreen> {
                   )
                 else
                   InfoPill(
-                    label: request.status,
+                    label: widget.l10n.workflowStatusLabel(request.status),
                     color: request.status == 'approved'
                         ? const Color(0xFF166534)
                         : const Color(0xFFB91C1C),
@@ -381,13 +389,17 @@ class _AuthorityIssueSheetState extends State<_AuthorityIssueSheet> {
                   widget.store.submitResolutionProof(issue.id, _proofPath!);
                   Navigator.pop(context);
                 },
-                child: const Text('Send for citizen verification'),
+                child: Text(
+                  widget.l10n.t('authority.sendForCitizenVerification'),
+                ),
               ),
             ],
             if (issue.isRatingFrozen && issue.flaggedReviewBatch != null) ...[
               const SizedBox(height: 16),
               Text(
-                'Rating is frozen after ${issue.flaggedReviewBatch!.reviewsInBatch} suspicious reviews.',
+                widget.l10n.t('authority.ratingFrozenSummary', {
+                  'count': issue.flaggedReviewBatch!.reviewsInBatch,
+                }),
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 10),

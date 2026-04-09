@@ -82,12 +82,14 @@ class _NgoPortalScreenState extends State<NgoPortalScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
-                Text('${issue.city}, ${issue.state}'),
+                Text(
+                  '${issue.city}, ${widget.l10n.stateName(issue.state)}',
+                ),
                 const SizedBox(height: 8),
                 Text(issue.description),
                 const SizedBox(height: 12),
                 if (requested)
-                  const InfoPill(label: 'Request raised')
+                  InfoPill(label: widget.l10n.t('ngo.requestRaised'))
                 else
                   FilledButton(
                     onPressed: () => widget.store.addNgoRequest(
@@ -138,9 +140,11 @@ class _NgoPortalScreenState extends State<NgoPortalScreen> {
               issue.title,
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
-            subtitle: Text('${issue.city}, ${issue.state}'),
+            subtitle: Text(
+              '${issue.city}, ${widget.l10n.stateName(issue.state)}',
+            ),
             trailing: InfoPill(
-              label: request.status,
+              label: widget.l10n.workflowStatusLabel(request.status),
               color: color,
               background: bg,
             ),
@@ -188,7 +192,10 @@ class _NgoPortalScreenState extends State<NgoPortalScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '${rating.resolutionRate}% resolved - ${rating.awaitingVerificationIssues} awaiting verification',
+                    widget.l10n.t('ngo.analyticsSummary', {
+                      'resolved': rating.resolutionRate,
+                      'awaiting': rating.awaitingVerificationIssues,
+                    }),
                   ),
                 ],
               ),
@@ -213,7 +220,7 @@ class _NgoPortalScreenState extends State<NgoPortalScreen> {
       children: [
         StatCard(
           label: widget.l10n.t('ngo.totalDonations'),
-          value: 'Rs ${total.toStringAsFixed(0)}',
+          value: widget.l10n.rupeesLabel(total.toStringAsFixed(0)),
           color: const Color(0xFF166534),
           background: const Color(0xFFDCFCE7),
           icon: Icons.currency_rupee_rounded,
@@ -233,7 +240,9 @@ class _NgoPortalScreenState extends State<NgoPortalScreen> {
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               subtitle: Text(donation.message),
-              trailing: Text('Rs ${donation.amount.toStringAsFixed(0)}'),
+              trailing: Text(
+                widget.l10n.rupeesLabel(donation.amount.toStringAsFixed(0)),
+              ),
             ),
           );
         }),
@@ -255,19 +264,25 @@ class _NgoPortalScreenState extends State<NgoPortalScreen> {
             children: [
               TextField(
                 controller: nameController,
-                decoration: const InputDecoration(labelText: 'Donor name'),
+                decoration: InputDecoration(
+                  labelText: widget.l10n.t('ngo.donorName'),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Amount'),
+                decoration: InputDecoration(
+                  labelText: widget.l10n.t('common.amount'),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: messageController,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Message'),
+                decoration: InputDecoration(
+                  labelText: widget.l10n.t('common.message'),
+                ),
               ),
             ],
           ),

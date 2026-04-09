@@ -1,0 +1,20 @@
+{
+  "name": "civicsetu-auto-report-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Secure OpenAI-powered proxy for CIVICSETU image-to-report drafting.",
+  "main": "server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2"
+  }
+}

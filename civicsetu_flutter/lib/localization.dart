@@ -13,6 +13,7 @@ class AppLocalizations {
     'common.logout': 'Logout',
     'common.back': 'Back',
     'common.cancel': 'Cancel',
+    'common.retry': 'Retry',
     'common.save': 'Save',
     'common.submit': 'Submit',
     'common.profile': 'Profile',
@@ -31,6 +32,19 @@ class AppLocalizations {
     'common.language': 'Language',
     'common.state': 'State',
     'common.city': 'City',
+    'common.email': 'Email',
+    'common.phone': 'Phone',
+    'common.trustCode': 'Trust Code',
+    'common.registration': 'Registration',
+    'common.rating': 'Rating',
+    'common.name': 'Name',
+    'common.amount': 'Amount',
+    'common.message': 'Message',
+    'common.notAvailable': 'N/A',
+    'common.you': 'You',
+    'common.selected': 'Selected',
+    'common.submittedStatus': 'Submitted',
+    'common.currencyRs': 'Rs {amount}',
     'common.up': 'Up',
     'common.down': 'Down',
     'common.reportedOn': 'Reported On',
@@ -81,6 +95,9 @@ class AppLocalizations {
     'landing.ngo': 'NGO Login',
     'landing.enter': 'Enter Portal',
     'landing.donate': 'Donate to NGO',
+    'landing.description':
+        'Mobile-first civic issue reporting, bidding, proof verification, NGO support, and quality analytics.',
+    'landing.demoAccess': 'Demo access for {role} workflow',
     'landing.stats.resolved': 'Issues Resolved',
     'landing.stats.states': 'States Covered',
     'landing.stats.ngos': 'Active NGOs',
@@ -111,12 +128,66 @@ class AppLocalizations {
     'citizen.duplicateMerged':
         'Same issue already exists at this location. Raised count updated to {count}x.',
     'citizen.submitted': 'Issue submitted successfully.',
+    'citizen.autoSubmitted':
+        'AI-reviewed complaint submitted automatically after your review window.',
     'citizen.verifyClose': 'Verify and Close Issue',
     'citizen.notSolved': 'Not Solved Yet',
     'citizen.rateExperience': 'Rate your experience',
     'citizen.support': 'CIVICSETU Support',
     'citizen.messagePlaceholder': 'Type your message...',
     'citizen.noIssues': 'No issues found.',
+    'citizen.aiAnalyzing':
+        'AI is analyzing the complaint image and drafting the report...',
+    'citizen.aiReady':
+        'AI draft is ready. Review the complaint before submission.',
+    'citizen.aiUnavailable':
+        'AI auto-report backend is not configured in this build. You can still complete the complaint manually.',
+    'citizen.aiRetry': 'Retry AI analysis',
+    'citizen.aiSubmitNow': 'Submit now',
+    'citizen.aiEditBeforeSubmit': 'Edit before submit',
+    'citizen.aiAutoSubmitIn': 'Auto submit in {seconds}s',
+    'citizen.aiPaused':
+        'Auto submit paused so you can review or edit the complaint.',
+    'citizen.aiManualReview':
+        'AI marked this complaint for manual review before auto-submit.',
+    'citizen.aiNotCivic':
+        'AI could not confidently confirm a supported civic issue in this photo.',
+    'citizen.aiNeedClearPhoto':
+        'Use a clearer photo showing the actual pothole, garbage, sewage, pole, streetlight, transformer, or damaged wire.',
+    'citizen.aiObjects': 'Detected objects',
+    'citizen.aiIssueType': 'Detected issue type',
+    'citizen.aiConfidence': 'AI confidence',
+    'citizen.aiSummary': 'AI summary',
+    'citizen.aiReasoning': 'Visible evidence',
+    'citizen.aiPoweredBy': 'Analysis provider',
+    'citizen.ratingFrozenSummary':
+        'Rating frozen at {score}/5 after {count} rapid reviews.',
+    'citizen.accuracyMeters': 'Approx. accuracy: {meters} m',
+    'citizen.chatSupport': 'CIVICSETU Support',
+    'citizen.chatWelcome':
+        'How can we help you track your civic issue today?',
+    'citizen.chatQuestionVerification':
+        'I want to know when authority verification will happen.',
+    'citizen.chatAnswerVerification':
+        'Once proof is uploaded, only the reporting citizen can close the issue.',
+    'citizen.requiredFields': 'Please fill all required fields.',
+    'citizen.ratingFrozenAfter': 'Frozen after {count} suspicious reviews.',
+    'citizen.saveRating': 'Save rating',
+    'issueType.pothole': 'Pothole',
+    'issueType.road_damage': 'Road damage',
+    'issueType.road_crack': 'Road crack',
+    'issueType.garbage_dump': 'Garbage dump',
+    'issueType.litter_accumulation': 'Litter accumulation',
+    'issueType.sewage_overflow': 'Sewage overflow',
+    'issueType.sewage_pipe_damage': 'Sewage pipe damage',
+    'issueType.water_leakage': 'Water leakage',
+    'issueType.waterlogging': 'Waterlogging',
+    'issueType.damaged_streetlight': 'Damaged streetlight',
+    'issueType.broken_electric_pole': 'Broken electric pole',
+    'issueType.transformer_damage': 'Transformer damage',
+    'issueType.electric_sparking': 'Electric sparking',
+    'issueType.damaged_electric_wire': 'Damaged electric wire',
+    'issueType.unclear_or_non_civic': 'Unclear or non-civic',
     'authority.title': 'Authority Portal',
     'authority.dashboard': 'Dashboard',
     'authority.issues': 'All Issues',
@@ -128,12 +199,23 @@ class AppLocalizations {
     'authority.freezeApprove': 'Approve review batch',
     'authority.freezeReject': 'Reject review batch',
     'authority.selectBid': 'Select bid',
+    'authority.noBidsYet': 'No bids yet.',
+    'authority.sendForCitizenVerification':
+        'Send for citizen verification',
+    'authority.ratingFrozenSummary':
+        'Rating is frozen after {count} suspicious reviews.',
+    'authority.resolutionTrustSummary':
+        '{resolved}% resolved - {trust}% trust',
     'contractor.title': 'Contractor Portal',
     'contractor.bids': 'Open Bids',
     'contractor.projects': 'My Projects',
     'contractor.profile': 'Profile',
     'contractor.submitBid': 'Submit bid',
     'contractor.uploadCompletion': 'Upload completion image',
+    'contractor.bidSubmitted': 'Bid submitted',
+    'contractor.estimatedEarnings': 'Estimated earnings',
+    'contractor.bidAmount': 'Bid amount',
+    'contractor.proposalNote': 'Proposal note',
     'ngo.title': 'NGO Portal',
     'ngo.issues': 'Unresolved Issues',
     'ngo.requests': 'My Requests',
@@ -142,6 +224,14 @@ class AppLocalizations {
     'ngo.raiseRequest': 'Raise Request',
     'ngo.addDonation': 'Add Donation',
     'ngo.totalDonations': 'Total Donations Received',
+    'ngo.requestRaised': 'Request raised',
+    'ngo.analyticsSummary':
+        '{resolved}% resolved - {awaiting} awaiting verification',
+    'ngo.donorName': 'Donor name',
+    'quality.excellent': 'Excellent',
+    'quality.strong': 'Strong',
+    'quality.fair': 'Fair',
+    'quality.needs_attention': 'Needs Attention',
     'msg.permissionDenied': 'Permission was denied on this device.',
     'msg.locationServiceDisabled':
         'Turn on device location services to geo-fetch the complaint spot.',
@@ -370,6 +460,45 @@ class AppLocalizations {
   String statusLabel(IssueStatus status) => t('status.${status.key}');
 
   String urgencyLabel(UrgencyTag tag) => t('urgency.${tag.key}');
+
+  String issueTypeLabel(String issueType) => t('issueType.$issueType');
+
+  String workflowStatusLabel(String status) {
+    switch (status.trim().toLowerCase()) {
+      case 'pending':
+        return t('common.pending');
+      case 'approved':
+        return t('common.approved');
+      case 'rejected':
+        return t('common.rejected');
+      case 'selected':
+        return t('common.selected');
+      case 'submitted':
+        return t('common.submittedStatus');
+      default:
+        return status;
+    }
+  }
+
+  String qualityBandLabel(String band) {
+    switch (band.trim().toLowerCase()) {
+      case 'excellent':
+        return t('quality.excellent');
+      case 'strong':
+        return t('quality.strong');
+      case 'fair':
+        return t('quality.fair');
+      case 'needs attention':
+        return t('quality.needs_attention');
+      default:
+        return band;
+    }
+  }
+
+  String portalDemoSubtitle(UserRole role) =>
+      t('landing.demoAccess', {'role': roleLabel(role)});
+
+  String rupeesLabel(Object amount) => t('common.currencyRs', {'amount': amount});
 
   String roleLabel(UserRole role) => switch (role) {
         UserRole.citizen => t('landing.citizen'),

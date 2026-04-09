@@ -91,7 +91,7 @@ class _ContractorPortalScreenState extends State<ContractorPortalScreen> {
                 Text(issue.description),
                 const SizedBox(height: 12),
                 if (alreadyBid)
-                  const InfoPill(label: 'Bid submitted')
+                  InfoPill(label: widget.l10n.t('contractor.bidSubmitted'))
                 else
                   FilledButton(
                     onPressed: () => _openBidDialog(context, issue),
@@ -170,8 +170,8 @@ class _ContractorPortalScreenState extends State<ContractorPortalScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: StatCard(
-                label: 'Estimated earnings',
-                value: 'Rs ${earnings.toStringAsFixed(0)}',
+                label: widget.l10n.t('contractor.estimatedEarnings'),
+                value: widget.l10n.rupeesLabel(earnings.toStringAsFixed(0)),
                 color: const Color(0xFF166534),
                 background: const Color(0xFFDCFCE7),
                 icon: Icons.currency_rupee_rounded,
@@ -187,14 +187,20 @@ class _ContractorPortalScreenState extends State<ContractorPortalScreen> {
                 title: Text(user.fullName),
                 subtitle: Text(user.company ?? ''),
               ),
-              ListTile(title: const Text('Email'), subtitle: Text(user.email)),
-              ListTile(title: const Text('Phone'), subtitle: Text(user.phone)),
               ListTile(
-                title: const Text('Registration'),
+                title: Text(widget.l10n.t('common.email')),
+                subtitle: Text(user.email),
+              ),
+              ListTile(
+                title: Text(widget.l10n.t('common.phone')),
+                subtitle: Text(user.phone),
+              ),
+              ListTile(
+                title: Text(widget.l10n.t('common.registration')),
                 subtitle: Text(user.registrationId ?? ''),
               ),
               ListTile(
-                title: const Text('Rating'),
+                title: Text(widget.l10n.t('common.rating')),
                 subtitle: Text('${user.rating ?? 0}/5'),
               ),
             ],
@@ -218,13 +224,17 @@ class _ContractorPortalScreenState extends State<ContractorPortalScreen> {
               TextField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Bid amount'),
+                decoration: InputDecoration(
+                  labelText: widget.l10n.t('contractor.bidAmount'),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: noteController,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Proposal note'),
+                decoration: InputDecoration(
+                  labelText: widget.l10n.t('contractor.proposalNote'),
+                ),
               ),
             ],
           ),

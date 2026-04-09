@@ -98,8 +98,10 @@ class LandingScreen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                'Mobile-first civic issue reporting, bidding, proof verification, NGO support, and quality analytics.',
-                style: TextStyle(color: Colors.white.withOpacity(0.85)),
+                l10n.t('landing.description'),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
               ),
               const SizedBox(height: 24),
               GridView.builder(
@@ -117,7 +119,7 @@ class LandingScreen extends StatelessWidget {
                   return StatCard(
                     label: item.$1,
                     value: item.$2,
-                    background: Colors.white.withOpacity(0.95),
+                    background: Colors.white.withValues(alpha: 0.95),
                     color: const Color(0xFF0B1C2D),
                   );
                 },
@@ -149,7 +151,7 @@ class LandingScreen extends StatelessWidget {
                         l10n.roleLabel(role),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                      subtitle: Text('Demo access for ${role.key} workflow'),
+                      subtitle: Text(l10n.portalDemoSubtitle(role)),
                       trailing: FilledButton(
                         onPressed: () => store.loginAs(role),
                         child: Text(l10n.t('landing.enter')),

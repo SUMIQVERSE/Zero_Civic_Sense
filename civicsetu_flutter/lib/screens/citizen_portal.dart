@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
@@ -7,6 +9,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../app_store.dart';
 import '../localization.dart';
 import '../models.dart';
+import '../services/auto_report_service.dart';
 import '../utils/location_service.dart';
 import '../widgets/common_widgets.dart';
 import 'complaint_camera_screen.dart';
@@ -35,16 +38,28 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
   final _chatController = TextEditingController();
   final stt.SpeechToText _speech = stt.SpeechToText();
   final Set<String> _votedIssues = <String>{};
+  final AutoReportService _autoReportService = AutoReportService();
   late final TabController _tabController;
 
   IssueCategory _category = IssueCategory.road;
+  UrgencyTag _urgencyTag = UrgencyTag.high;
   bool _isRecording = false;
   bool _detectingLocation = false;
+  bool _analyzingAutoReport = false;
+  bool _programmaticDraftUpdate = false;
   String? _imagePath;
+  String? _analysisError;
+  AutoReportDraft? _autoReportDraft;
   double? _latitude;
   double? _longitude;
   double? _accuracyMeters;
+  int? _autoSubmitCountdown;
   int _tabIndex = 0;
+  int _analysisToken = 0;
+  Timer? _autoSubmitTimer;
+
+  bool get _isAutoSubmitArmed =>
+      _autoSubmitTimer != null && (_autoSubmitCountdown ?? 0) > 0;
 
   @override
   void initState() {
@@ -58,10 +73,20 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
     final user = widget.store.currentUser;
     _stateController.text = user?.state ?? '';
     _cityController.text = user?.city ?? '';
+    for (final controller in [
+      _titleController,
+      _descriptionController,
+      _stateController,
+      _cityController,
+      _addressController,
+    ]) {
+      controller.addListener(_handleManualDraftEdit);
+    }
   }
 
   @override
   void dispose() {
+    _autoSubmitTimer?.cancel();
     _titleController.dispose();
     _descriptionController.dispose();
     _stateController.dispose();
@@ -179,14 +204,17 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
                 Text(issue.description),
                 const SizedBox(height: 12),
                 Text(
-                  '${issue.city}, ${issue.state}',
+                  '${issue.city}, ${widget.l10n.stateName(issue.state)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 if (issue.isRatingFrozen &&
                     issue.flaggedReviewBatch != null) ...[
                   const SizedBox(height: 10),
                   Text(
-                    'Rating frozen at ${issue.flaggedReviewBatch!.frozenScore}/5 after ${issue.flaggedReviewBatch!.reviewsInBatch} rapid reviews.',
+                    widget.l10n.t('citizen.ratingFrozenSummary', {
+                      'score': issue.flaggedReviewBatch!.frozenScore,
+                      'count': issue.flaggedReviewBatch!.reviewsInBatch,
+                    }),
                     style: const TextStyle(
                       color: Color(0xFF92400E),
                       fontWeight: FontWeight.w600,
@@ -250,6 +278,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
   }
 
   Widget _buildReportTab(BuildContext context) {
+    final autoReportCard = _buildAutoReportReviewCard();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
@@ -294,6 +323,9 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
               .toList(),
           onChanged: (value) {
             if (value != null) {
+              if (_isAutoSubmitArmed && !_programmaticDraftUpdate) {
+                _pauseAutoSubmit();
+              }
               setState(() => _category = value);
             }
           },
@@ -357,6 +389,10 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
           Text(
             '${widget.l10n.t('citizen.locationReady')} (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})',
           ),
+        if (autoReportCard != null) ...[
+          const SizedBox(height: 16),
+          autoReportCard,
+        ],
         const SizedBox(height: 12),
         TextField(
           controller: _stateController,
@@ -413,7 +449,11 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
           ),
         if (_accuracyMeters != null) ...[
           const SizedBox(height: 8),
-          Text('Approx. accuracy: ${_accuracyMeters!.round()} m'),
+          Text(
+            widget.l10n.t('citizen.accuracyMeters', {
+              'meters': _accuracyMeters!.round(),
+            }),
+          ),
         ],
         const SizedBox(height: 20),
         FilledButton.icon(
@@ -425,16 +465,195 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
     );
   }
 
+  Widget? _buildAutoReportReviewCard() {
+    final shouldShowFallbackCard = _imagePath != null &&
+        !_autoReportService.isConfigured &&
+        !_analyzingAutoReport &&
+        _analysisError == null &&
+        _autoReportDraft == null;
+    final shouldShow = shouldShowFallbackCard ||
+        _analyzingAutoReport ||
+        _analysisError != null ||
+        _autoReportDraft != null;
+    if (!shouldShow) {
+      return null;
+    }
+
+    return Card(
+      color: const Color(0xFFF8FAFC),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Color(0xFF7C3AED),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.l10n.t('citizen.aiReady'),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_analyzingAutoReport) ...[
+              const LinearProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(widget.l10n.t('citizen.aiAnalyzing')),
+            ] else if (shouldShowFallbackCard) ...[
+              Text(widget.l10n.t('citizen.aiUnavailable')),
+            ] else if (_analysisError != null) ...[
+              Text(
+                _analysisError!,
+                style: const TextStyle(color: Color(0xFFB91C1C)),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _retryAutoReportAnalysis,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(widget.l10n.t('citizen.aiRetry')),
+              ),
+            ] else if (_autoReportDraft != null) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  InfoPill(
+                    label:
+                        '${widget.l10n.t('citizen.aiConfidence')} ${(100 * _autoReportDraft!.confidence).round()}%',
+                    color: const Color(0xFF0F766E),
+                    background: const Color(0xFFDCFCE7),
+                  ),
+                  InfoPill(
+                    label: widget.l10n.urgencyLabel(_autoReportDraft!.urgency),
+                    color: const Color(0xFFB91C1C),
+                    background: const Color(0xFFFEE2E2),
+                  ),
+                  InfoPill(
+                    label: _autoReportDraft!.providerLabel,
+                    color: const Color(0xFF1D4ED8),
+                    background: const Color(0xFFE0E7FF),
+                  ),
+                  InfoPill(
+                    label: widget.l10n.issueTypeLabel(
+                      _autoReportDraft!.specificIssueType,
+                    ),
+                    color: const Color(0xFF4C1D95),
+                    background: const Color(0xFFF3E8FF),
+                  ),
+                  if (_autoSubmitCountdown != null)
+                    InfoPill(
+                      label: widget.l10n.t('citizen.aiAutoSubmitIn', {
+                        'seconds': _autoSubmitCountdown,
+                      }),
+                      color: const Color(0xFF92400E),
+                      background: const Color(0xFFFEF3C7),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                widget.l10n.t('citizen.aiSummary'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(_autoReportDraft!.summary),
+              const SizedBox(height: 12),
+              if (!_autoReportDraft!.isCivicIssue) ...[
+                Text(
+                  widget.l10n.t('citizen.aiNotCivic'),
+                  style: const TextStyle(
+                    color: Color(0xFFB91C1C),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(widget.l10n.t('citizen.aiNeedClearPhoto')),
+                const SizedBox(height: 12),
+              ],
+              Text(
+                widget.l10n.t('citizen.aiReasoning'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(_autoReportDraft!.reasoning),
+              if (_autoReportDraft!.detectedObjects.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  widget.l10n.t('citizen.aiObjects'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _autoReportDraft!.detectedObjects
+                      .map((object) => InfoPill(label: object))
+                      .toList(),
+                ),
+              ],
+              if (_autoReportDraft!.needsManualReview) ...[
+                const SizedBox(height: 12),
+                Text(
+                  widget.l10n.t('citizen.aiManualReview'),
+                  style: const TextStyle(
+                    color: Color(0xFF92400E),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (_isAutoSubmitArmed)
+                    OutlinedButton.icon(
+                      onPressed: _pauseAutoSubmit,
+                      icon: const Icon(Icons.edit_rounded),
+                      label: Text(widget.l10n.t('citizen.aiEditBeforeSubmit')),
+                    ),
+                  if (_autoReportDraft!.isCivicIssue)
+                    FilledButton.icon(
+                      onPressed: () => _submitIssue(),
+                      icon: const Icon(Icons.send_rounded),
+                      label: Text(widget.l10n.t('citizen.aiSubmitNow')),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: _retryAutoReportAnalysis,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: Text(widget.l10n.t('citizen.aiRetry')),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildChatTab() {
+    final youLabel = widget.l10n.t('common.you');
+    final supportLabel = widget.l10n.t('citizen.chatSupport');
     final bubbles = [
       (
-        'CIVICSETU Support',
-        'How can we help you track your civic issue today?',
+        supportLabel,
+        widget.l10n.t('citizen.chatWelcome'),
       ),
-      ('You', 'I want to know when authority verification will happen.'),
+      (youLabel, widget.l10n.t('citizen.chatQuestionVerification')),
       (
-        'CIVICSETU Support',
-        'Once proof is uploaded, only the reporting citizen can close the issue.',
+        supportLabel,
+        widget.l10n.t('citizen.chatAnswerVerification'),
       ),
     ];
     return ListView(
@@ -442,7 +661,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
       children: [
         ...bubbles.map(
           (bubble) => Align(
-            alignment: bubble.$1 == 'You'
+            alignment: bubble.$1 == youLabel
                 ? Alignment.centerRight
                 : Alignment.centerLeft,
             child: Container(
@@ -451,13 +670,17 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
               constraints: const BoxConstraints(maxWidth: 320),
               decoration: BoxDecoration(
                 color:
-                    bubble.$1 == 'You' ? const Color(0xFF0B1C2D) : Colors.white,
+                    bubble.$1 == youLabel
+                        ? const Color(0xFF0B1C2D)
+                        : Colors.white,
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Text(
                 bubble.$2,
                 style: TextStyle(
-                  color: bubble.$1 == 'You' ? Colors.white : Colors.black87,
+                  color: bubble.$1 == youLabel
+                      ? Colors.white
+                      : Colors.black87,
                 ),
               ),
             ),
@@ -535,7 +758,9 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
               user.fullName,
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-            subtitle: Text('${user.city}, ${user.state}'),
+            subtitle: Text(
+              '${user.city}, ${widget.l10n.stateName(user.state ?? '')}',
+            ),
             trailing: const Icon(
               Icons.verified_rounded,
               color: Color(0xFF0F766E),
@@ -546,11 +771,19 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
         Card(
           child: Column(
             children: [
-              ListTile(title: const Text('Email'), subtitle: Text(user.email)),
-              ListTile(title: const Text('Phone'), subtitle: Text(user.phone)),
               ListTile(
-                title: const Text('Trust Code'),
-                subtitle: Text(user.trustCode ?? 'N/A'),
+                title: Text(widget.l10n.t('common.email')),
+                subtitle: Text(user.email),
+              ),
+              ListTile(
+                title: Text(widget.l10n.t('common.phone')),
+                subtitle: Text(user.phone),
+              ),
+              ListTile(
+                title: Text(widget.l10n.t('common.trustCode')),
+                subtitle: Text(
+                  user.trustCode ?? widget.l10n.t('common.notAvailable'),
+                ),
               ),
             ],
           ),
@@ -582,20 +815,9 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
       return;
     }
 
-    setState(() {
-      _imagePath = result.imagePath;
-    });
-
-    if (result.locationDraft != null) {
-      _applyLocationDraft(result.locationDraft!);
-    }
-
-    _goToReportTab();
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(widget.l10n.t('camera.photoAttached'))),
+    await _handleSelectedImage(
+      imagePath: result.imagePath,
+      locationDraft: result.locationDraft,
     );
   }
 
@@ -604,7 +826,21 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
     _tabController.animateTo(1);
   }
 
-  void _applyLocationDraft(LocationDraft draft) {
+  void _handleManualDraftEdit() {
+    if (_programmaticDraftUpdate || !_isAutoSubmitArmed) {
+      return;
+    }
+    _pauseAutoSubmit();
+  }
+
+  void _applyLocationDraft(
+    LocationDraft draft, {
+    bool pauseAutoSubmit = false,
+  }) {
+    if (pauseAutoSubmit && _isAutoSubmitArmed) {
+      _pauseAutoSubmit();
+    }
+    _programmaticDraftUpdate = true;
     setState(() {
       _latitude = draft.latitude;
       _longitude = draft.longitude;
@@ -619,6 +855,46 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
         _addressController.text = draft.address;
       }
     });
+    _programmaticDraftUpdate = false;
+  }
+
+  LocationDraft? _currentLocationDraft() {
+    if (_latitude == null || _longitude == null) {
+      return null;
+    }
+    return LocationDraft(
+      latitude: _latitude!,
+      longitude: _longitude!,
+      state: _stateController.text.trim(),
+      city: _cityController.text.trim(),
+      address: _addressController.text.trim(),
+      accuracyMeters: _accuracyMeters ?? 0,
+    );
+  }
+
+  Future<void> _handleSelectedImage({
+    required String imagePath,
+    LocationDraft? locationDraft,
+  }) async {
+    _cancelAutoSubmit(clearDraft: true);
+    if (locationDraft != null) {
+      _applyLocationDraft(locationDraft);
+    }
+    setState(() {
+      _imagePath = imagePath;
+      _analysisError = null;
+      _autoReportDraft = null;
+      _analyzingAutoReport = _autoReportService.isConfigured;
+      _urgencyTag = UrgencyTag.high;
+    });
+    _goToReportTab();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(
+        SnackBar(content: Text(widget.l10n.t('camera.photoAttached'))));
+    if (_autoReportService.isConfigured) {
+      await _runAutoReportAnalysis();
+    }
   }
 
   Future<void> _pickImage() async {
@@ -627,15 +903,137 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
     if (result == null) {
       return;
     }
-    setState(() => _imagePath = result.path);
-    _goToReportTab();
-    if (!mounted) {
+    await _handleSelectedImage(imagePath: result.path);
+  }
+
+  Future<void> _retryAutoReportAnalysis() async {
+    if (_imagePath == null) {
+      return;
+    }
+    await _runAutoReportAnalysis();
+  }
+
+  Future<void> _runAutoReportAnalysis() async {
+    final imagePath = _imagePath;
+    final user = widget.store.currentUser;
+    if (imagePath == null || user == null) {
+      return;
+    }
+
+    final currentToken = ++_analysisToken;
+    _cancelAutoSubmit(clearDraft: true);
+    setState(() {
+      _analyzingAutoReport = true;
+      _analysisError = null;
+    });
+
+    try {
+      final draft = await _autoReportService.analyzeComplaintCapture(
+        imagePath: imagePath,
+        language: widget.store.language,
+        user: user,
+        locationDraft: _currentLocationDraft(),
+      );
+      if (!mounted || currentToken != _analysisToken) {
+        return;
+      }
+      _applyAutoReportDraft(draft);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(widget.l10n.t('citizen.aiReady'))));
+    } catch (error) {
+      if (!mounted || currentToken != _analysisToken) {
+        return;
+      }
+      setState(() {
+        _analysisError = '$error';
+      });
+    } finally {
+      if (mounted && currentToken == _analysisToken) {
+        setState(() => _analyzingAutoReport = false);
+      }
+    }
+  }
+
+  void _applyAutoReportDraft(AutoReportDraft draft) {
+    _programmaticDraftUpdate = true;
+    if (draft.isCivicIssue) {
+      _titleController.text = draft.title;
+      _descriptionController.text = draft.description;
+    }
+    setState(() {
+      if (draft.shouldUpdateCategory) {
+        _category = draft.category;
+      }
+      _urgencyTag = draft.urgency;
+      _analysisError = null;
+      _autoReportDraft = draft;
+    });
+    _programmaticDraftUpdate = false;
+
+    if (draft.autoSubmitRecommended &&
+        !draft.needsManualReview &&
+        draft.reviewWindowSeconds > 0) {
+      _startAutoSubmitCountdown(draft.reviewWindowSeconds);
+    }
+  }
+
+  void _startAutoSubmitCountdown(int seconds) {
+    _cancelAutoSubmit(showMessage: false);
+    if (seconds <= 0) {
+      _submitIssue(autoSubmitted: true);
+      return;
+    }
+
+    setState(() => _autoSubmitCountdown = seconds);
+    _autoSubmitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final next = (_autoSubmitCountdown ?? 0) - 1;
+      if (next <= 0) {
+        timer.cancel();
+        _autoSubmitTimer = null;
+        _submitIssue(autoSubmitted: true);
+        return;
+      }
+      setState(() => _autoSubmitCountdown = next);
+    });
+  }
+
+  void _pauseAutoSubmit() {
+    final hadCountdown = _isAutoSubmitArmed;
+    _cancelAutoSubmit(showMessage: false);
+    if (!hadCountdown || !mounted) {
       return;
     }
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(
-        SnackBar(content: Text(widget.l10n.t('camera.photoAttached'))));
+    ).showSnackBar(SnackBar(content: Text(widget.l10n.t('citizen.aiPaused'))));
+  }
+
+  void _cancelAutoSubmit({
+    bool showMessage = false,
+    bool clearDraft = false,
+  }) {
+    _autoSubmitTimer?.cancel();
+    _autoSubmitTimer = null;
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _autoSubmitCountdown = null;
+      if (clearDraft) {
+        _autoReportDraft = null;
+      }
+    });
+    if (showMessage) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+          SnackBar(content: Text(widget.l10n.t('citizen.aiPaused'))));
+    }
   }
 
   Future<void> _toggleVoiceRecording() async {
@@ -659,9 +1057,11 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
     await _speech.listen(
       localeId: widget.store.language.speechLocale,
       onResult: (result) {
+        _programmaticDraftUpdate = true;
         setState(() {
           _descriptionController.text = result.recognizedWords;
         });
+        _programmaticDraftUpdate = false;
       },
     );
   }
@@ -675,7 +1075,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
         serviceDisabledMessage: widget.l10n.t('msg.locationServiceDisabled'),
         userAgent: 'com.civicsetu.mobile',
       );
-      _applyLocationDraft(draft);
+      _applyLocationDraft(draft, pauseAutoSubmit: true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -690,7 +1090,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
     }
   }
 
-  void _submitIssue() {
+  void _submitIssue({bool autoSubmitted = false}) {
     final user = widget.store.currentUser!;
     if (_titleController.text.trim().isEmpty ||
         _descriptionController.text.trim().isEmpty ||
@@ -698,7 +1098,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
         _cityController.text.trim().isEmpty ||
         _addressController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all required fields.')),
+        SnackBar(content: Text(widget.l10n.t('citizen.requiredFields'))),
       );
       return;
     }
@@ -718,7 +1118,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
       assignedNgo: null,
       beforeImage: _imagePath ?? _sampleImageFor(_category),
       afterImage: null,
-      urgencyTag: UrgencyTag.high,
+      urgencyTag: _urgencyTag,
       upvotes: 0,
       downvotes: 0,
       overallRatingScore: 0,
@@ -736,10 +1136,17 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
         ? widget.l10n.t('citizen.duplicateMerged', {
             'count': result.duplicateCount,
           })
-        : widget.l10n.t('citizen.submitted');
+        : autoSubmitted
+            ? widget.l10n.t('citizen.autoSubmitted')
+            : widget.l10n.t('citizen.submitted');
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+
+    _cancelAutoSubmit(clearDraft: true);
+    _analysisError = null;
+    _analyzingAutoReport = false;
+    _urgencyTag = UrgencyTag.high;
     _titleController.clear();
     _descriptionController.clear();
     _addressController.clear();
@@ -819,7 +1226,10 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
                         currentIssue.flaggedReviewBatch != null) ...[
                       const SizedBox(height: 6),
                       Text(
-                        'Frozen after ${currentIssue.flaggedReviewBatch!.reviewsInBatch} suspicious reviews.',
+                        widget.l10n.t('citizen.ratingFrozenAfter', {
+                          'count':
+                              currentIssue.flaggedReviewBatch!.reviewsInBatch,
+                        }),
                         style: const TextStyle(color: Color(0xFF92400E)),
                       ),
                     ],
@@ -871,7 +1281,9 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
                                   currentIssue.id,
                                   value,
                                 ),
-                                child: const Text('Save rating'),
+                                child: Text(
+                                  widget.l10n.t('citizen.saveRating'),
+                                ),
                               ),
                             ],
                           );
