@@ -19,6 +19,7 @@ dependencies:
   latlong2: any
   shared_preferences: any
   speech_to_text: any
+  supabase_flutter: ^2.12.2
 
 dev_dependencies:
   flutter_test:

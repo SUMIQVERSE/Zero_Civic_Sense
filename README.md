@@ -8,6 +8,7 @@ The old React/Vite code has been removed. This repository now contains the Flutt
 
 - `civicsetu_flutter/` - main Flutter application
 - `backend/auto-report-proxy/` - secure AI image analysis backend for auto-report drafts
+- `backend/supabase/` - starter auth and database schema for Supabase
 - `README.md` - root project overview
 - `.gitignore` - GitHub-safe ignore rules for Flutter, Android, and local machine files
 
@@ -25,6 +26,7 @@ The old React/Vite code has been removed. This repository now contains the Flutt
 - Comments, bids, donations, and NGO requests
 - State quality rankings
 - English, Hindi, Tamil, Marathi, and Kannada support
+- Email/password and Google auth scaffolding with demo fallback
 
 ## Important Files
 
@@ -48,6 +50,12 @@ From `civicsetu_flutter/`:
 ```bash
 flutter pub get
 flutter run
+```
+
+Run Flutter with Supabase auth enabled:
+
+```bash
+flutter run --dart-define=CIVICSETU_SUPABASE_URL=<your-project-url> --dart-define=CIVICSETU_SUPABASE_PUBLISHABLE_KEY=<your-publishable-or-anon-key>
 ```
 
 Build an APK:
@@ -86,8 +94,10 @@ git push -u origin main
 ## Notes
 
 - The app currently uses seeded in-memory demo data.
-- Login is role-based demo access and is not connected to a database.
+- When Supabase config is missing, login stays in role-based demo mode.
+- When Supabase config is provided, the app switches to real auth and profile onboarding.
 - The camera flow uses the in-app Flutter camera screen and live device location.
 - Complaint title, category, and description can now be AI-drafted from the captured image, then short-reviewed before optional auto-submit.
 - The OpenAI key belongs only on the backend proxy, never inside the Android app.
+- Supabase setup details live in `backend/supabase/README.md`.
 - APKs, local SDK paths, Gradle caches, and other machine-specific files are intentionally ignored for GitHub.

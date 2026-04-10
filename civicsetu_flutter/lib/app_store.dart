@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import 'models.dart';
+import 'services/supabase_config.dart';
 
 const _languageStorageKey = 'civicsetu.language';
 const _themeStorageKey = 'civicsetu.darkMode';
@@ -136,6 +139,28 @@ _SpikeMetrics _spikeMetrics(
   );
 }
 
+String? _optionalText(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? null : text;
+}
+
+double? _optionalDouble(dynamic value) {
+  if (value is num) {
+    return value.toDouble();
+  }
+  return double.tryParse(value?.toString() ?? '');
+}
+
+String _firstNonEmpty(Iterable<String?> values, {String fallback = ''}) {
+  for (final value in values) {
+    final text = value?.trim() ?? '';
+    if (text.isNotEmpty) {
+      return text;
+    }
+  }
+  return fallback;
+}
+
 class AppStore extends ChangeNotifier {
   AppStore()
       : _users = _usersSeed,
@@ -151,46 +176,75 @@ class AppStore extends ChangeNotifier {
   List<NgoRequest> _ngoRequests;
   List<Donation> _donations;
   List<IssueComment> _comments;
+  StreamSubscription<supabase.AuthState>? _authSubscription;
 
   AppUser? _currentUser;
+  ProfileSetupDraft? _pendingProfileDraft;
   AppLanguage _language = AppLanguage.en;
   bool _isDarkMode = false;
   bool _alertsEnabled = true;
   bool _autoLocationEnabled = true;
   bool _aiAssistEnabled = true;
+  bool _isInitialized = false;
+  bool _isAuthBusy = false;
   int _citizenInitialTabIndex = 0;
+  AppAuthMode _authMode = AppAuthMode.demo;
+  String? _authMessage;
   PendingComplaintCapture? _pendingComplaintCapture;
 
-  List<AppUser> get users => List.unmodifiable(_users);
+  List<AppUser> get users {
+    final currentUser = _currentUser;
+    if (currentUser == null ||
+        _users.any((user) => user.id == currentUser.id)) {
+      return List.unmodifiable(_users);
+    }
+    return List.unmodifiable([currentUser, ..._users]);
+  }
+
   List<Issue> get issues => List.unmodifiable(_issues);
   List<Bid> get bids => List.unmodifiable(_bids);
   List<NgoRequest> get ngoRequests => List.unmodifiable(_ngoRequests);
   List<Donation> get donations => List.unmodifiable(_donations);
   List<IssueComment> get comments => List.unmodifiable(_comments);
   AppUser? get currentUser => _currentUser;
+  ProfileSetupDraft? get pendingProfileDraft => _pendingProfileDraft;
   AppLanguage get language => _language;
   bool get isDarkMode => _isDarkMode;
   bool get alertsEnabled => _alertsEnabled;
   bool get autoLocationEnabled => _autoLocationEnabled;
   bool get aiAssistEnabled => _aiAssistEnabled;
+  bool get isInitialized => _isInitialized;
+  bool get isAuthBusy => _isAuthBusy;
+  bool get isAuthConfigured => _authMode == AppAuthMode.supabase;
+  bool get needsProfileSetup => _pendingProfileDraft != null;
   int get citizenInitialTabIndex => _citizenInitialTabIndex;
+  String? get authMessage => _authMessage;
 
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_languageStorageKey);
-    var changed = false;
     if (stored != null) {
       _language = AppLanguageX.fromCode(stored);
-      changed = true;
     }
     _isDarkMode = prefs.getBool(_themeStorageKey) ?? _isDarkMode;
     _alertsEnabled = prefs.getBool(_alertsStorageKey) ?? _alertsEnabled;
     _autoLocationEnabled =
         prefs.getBool(_autoLocationStorageKey) ?? _autoLocationEnabled;
     _aiAssistEnabled = prefs.getBool(_aiAssistStorageKey) ?? _aiAssistEnabled;
-    if (changed || stored == null) {
-      notifyListeners();
+    if (SupabaseConfig.isConfigured) {
+      _authMode = AppAuthMode.supabase;
+      _authSubscription = supabase
+          .Supabase.instance.client.auth.onAuthStateChange
+          .listen((event) {
+        _syncSupabaseUser(event.session?.user);
+      });
+      await _syncSupabaseUser(
+        supabase.Supabase.instance.client.auth.currentUser,
+        notify: false,
+      );
     }
+    _isInitialized = true;
+    notifyListeners();
   }
 
   Future<void> setLanguage(AppLanguage language) async {
@@ -228,18 +282,42 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearAuthMessage() {
+    if (_authMessage == null) {
+      return;
+    }
+    _authMessage = null;
+    notifyListeners();
+  }
+
   void loginAs(UserRole role, {int citizenInitialTabIndex = 0}) {
+    if (isAuthConfigured) {
+      return;
+    }
     _currentUser = _users.firstWhere((user) => user.role == role);
+    _pendingProfileDraft = null;
+    _authMessage = null;
     _citizenInitialTabIndex =
         role == UserRole.citizen ? citizenInitialTabIndex : 0;
     notifyListeners();
   }
 
-  void logout() {
-    _currentUser = null;
+  Future<void> logout() async {
+    _authMessage = null;
+    _pendingProfileDraft = null;
     _citizenInitialTabIndex = 0;
     _pendingComplaintCapture = null;
-    notifyListeners();
+    if (!isAuthConfigured) {
+      _currentUser = null;
+      notifyListeners();
+      return;
+    }
+    try {
+      await supabase.Supabase.instance.client.auth.signOut();
+    } on supabase.AuthException catch (error) {
+      _authMessage = error.message;
+      notifyListeners();
+    }
   }
 
   void stageComplaintCapture(PendingComplaintCapture capture) {
@@ -250,6 +328,238 @@ class AppStore extends ChangeNotifier {
     final capture = _pendingComplaintCapture;
     _pendingComplaintCapture = null;
     return capture;
+  }
+
+  Future<String> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    if (!isAuthConfigured) {
+      throw Exception('Supabase auth is not configured in this build.');
+    }
+    await _runAuthAction(() async {
+      await supabase.Supabase.instance.client.auth.signInWithPassword(
+        email: email.trim(),
+        password: password,
+      );
+    });
+    return 'Signed in successfully.';
+  }
+
+  Future<String> signUpWithPassword({
+    required String fullName,
+    required String email,
+    required String password,
+  }) async {
+    if (!isAuthConfigured) {
+      throw Exception('Supabase auth is not configured in this build.');
+    }
+    late final supabase.AuthResponse response;
+    await _runAuthAction(() async {
+      response = await supabase.Supabase.instance.client.auth.signUp(
+        email: email.trim(),
+        password: password,
+        emailRedirectTo: kIsWeb ? null : SupabaseConfig.redirectUrl,
+        data: {
+          'full_name': fullName.trim(),
+        },
+      );
+    });
+    if (response.session == null) {
+      return 'Account created. Verify your email, then sign in.';
+    }
+    return 'Account created. Finish your profile to continue.';
+  }
+
+  Future<String> signInWithGoogle() async {
+    if (!isAuthConfigured) {
+      throw Exception('Supabase auth is not configured in this build.');
+    }
+    await _runAuthAction(() async {
+      await supabase.Supabase.instance.client.auth.signInWithOAuth(
+        supabase.OAuthProvider.google,
+        redirectTo: kIsWeb ? null : SupabaseConfig.redirectUrl,
+        authScreenLaunchMode: supabase.LaunchMode.externalApplication,
+      );
+    });
+    return 'Continue in your browser to finish Google sign-in.';
+  }
+
+  Future<String> completeProfile(ProfileSetupDraft draft) async {
+    final authUser = isAuthConfigured
+        ? supabase.Supabase.instance.client.auth.currentUser
+        : null;
+    if (authUser == null) {
+      throw Exception('No authenticated user was found.');
+    }
+    if (!draft.isComplete) {
+      throw Exception('Please complete all required profile fields.');
+    }
+    await _runAuthAction(() async {
+      await supabase.Supabase.instance.client.from('profiles').upsert({
+        'id': authUser.id,
+        'email': draft.email.trim(),
+        'full_name': draft.fullName.trim(),
+        'phone': draft.phone.trim(),
+        'role': draft.role!.key,
+        'state': draft.state.trim(),
+        'city': draft.city.trim(),
+        'address': draft.address.trim(),
+        'organization_name': draft.organizationName.trim(),
+        'registration_id': draft.registrationId.trim(),
+      });
+      await _syncSupabaseUser(authUser, notify: false);
+    });
+    notifyListeners();
+    return 'Profile saved successfully.';
+  }
+
+  Future<void> _runAuthAction(Future<void> Function() action) async {
+    _isAuthBusy = true;
+    _authMessage = null;
+    notifyListeners();
+    try {
+      await action();
+    } on supabase.AuthException catch (error) {
+      _authMessage = error.message;
+      rethrow;
+    } on supabase.PostgrestException catch (error) {
+      _authMessage = error.message;
+      rethrow;
+    } finally {
+      _isAuthBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _syncSupabaseUser(
+    supabase.User? authUser, {
+    bool notify = true,
+  }) async {
+    if (!isAuthConfigured) {
+      return;
+    }
+    if (authUser == null) {
+      _currentUser = null;
+      _pendingProfileDraft = null;
+      _citizenInitialTabIndex = 0;
+      if (notify) {
+        notifyListeners();
+      }
+      return;
+    }
+
+    try {
+      final row = await supabase.Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', authUser.id)
+          .maybeSingle();
+      final draft = _draftFromAuth(authUser, row);
+      if (row == null || !draft.isComplete) {
+        _currentUser = null;
+        _pendingProfileDraft = draft;
+      } else {
+        _currentUser = _userFromProfileRow(authUser, row);
+        _pendingProfileDraft = null;
+      }
+      _authMessage = null;
+    } on supabase.PostgrestException catch (error) {
+      _currentUser = null;
+      _pendingProfileDraft = _draftFromAuth(authUser);
+      _authMessage = error.message;
+    }
+
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  ProfileSetupDraft _draftFromAuth(
+    supabase.User authUser, [
+    Map<String, dynamic>? row,
+  ]) {
+    final metadata = authUser.userMetadata ?? const <String, dynamic>{};
+    final organizationName = _firstNonEmpty([
+      _optionalText(row?['organization_name']),
+      _optionalText(metadata['organization_name']),
+      _optionalText(metadata['company']),
+      _optionalText(metadata['ngo_name']),
+    ]);
+    return ProfileSetupDraft(
+      fullName: _firstNonEmpty([
+        _optionalText(row?['full_name']),
+        _optionalText(metadata['full_name']),
+        _optionalText(metadata['name']),
+      ]),
+      email: _firstNonEmpty([
+        _optionalText(row?['email']),
+        authUser.email,
+      ]),
+      phone: _firstNonEmpty([
+        _optionalText(row?['phone']),
+        authUser.phone,
+        _optionalText(metadata['phone']),
+      ]),
+      role: userRoleFromKey(
+        _firstNonEmpty([
+          _optionalText(row?['role']),
+          _optionalText(metadata['preferred_role']),
+          _optionalText(metadata['role']),
+        ]),
+      ),
+      state: _firstNonEmpty([
+        _optionalText(row?['state']),
+        _optionalText(metadata['state']),
+      ]),
+      city: _firstNonEmpty([
+        _optionalText(row?['city']),
+        _optionalText(metadata['city']),
+      ]),
+      address: _firstNonEmpty([
+        _optionalText(row?['address']),
+        _optionalText(metadata['address']),
+      ]),
+      organizationName: organizationName,
+      registrationId: _firstNonEmpty([
+        _optionalText(row?['registration_id']),
+        _optionalText(metadata['registration_id']),
+      ]),
+    );
+  }
+
+  AppUser _userFromProfileRow(
+    supabase.User authUser,
+    Map<String, dynamic> row,
+  ) {
+    final draft = _draftFromAuth(authUser, row);
+    final role = draft.role ?? UserRole.citizen;
+    final organizationName = draft.organizationName.trim();
+    return AppUser(
+      id: authUser.id,
+      fullName: draft.fullName.trim(),
+      email: draft.email.trim(),
+      phone: draft.phone.trim(),
+      role: role,
+      trustCode: _optionalText(row['trust_code']),
+      company: role == UserRole.contractor && organizationName.isNotEmpty
+          ? organizationName
+          : null,
+      ngoName: role == UserRole.ngo && organizationName.isNotEmpty
+          ? organizationName
+          : null,
+      state: _optionalText(row['state']),
+      city: _optionalText(row['city']),
+      address: _optionalText(row['address']),
+      registrationId: _optionalText(row['registration_id']),
+      rating: _optionalDouble(row['rating']),
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   AddIssueResult addIssue(Issue issue) {

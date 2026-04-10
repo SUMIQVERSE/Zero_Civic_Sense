@@ -1,16 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_store.dart';
 import 'localization.dart';
 import 'models.dart';
+import 'screens/auth_screen.dart';
 import 'screens/authority_portal.dart';
 import 'screens/citizen_portal.dart';
 import 'screens/contractor_portal.dart';
 import 'screens/landing_screen.dart';
 import 'screens/ngo_portal.dart';
+import 'screens/profile_onboarding_screen.dart';
+import 'services/supabase_config.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (SupabaseConfig.isConfigured) {
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      anonKey: SupabaseConfig.publicKey,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+      ),
+    );
+  }
   runApp(const CivicSetuApp());
 }
 
@@ -29,6 +42,12 @@ class _CivicSetuAppState extends State<CivicSetuApp> {
     super.initState();
     _store = AppStore();
     _store.initialize();
+  }
+
+  @override
+  void dispose() {
+    _store.dispose();
+    super.dispose();
   }
 
   @override
@@ -94,6 +113,18 @@ class _CivicSetuAppState extends State<CivicSetuApp> {
   }
 
   Widget _buildHome(AppLocalizations l10n) {
+    if (!_store.isInitialized) {
+      return _AppBootstrapScreen(l10n: l10n);
+    }
+    if (_store.isAuthConfigured) {
+      if (_store.currentUser == null && _store.needsProfileSetup) {
+        return ProfileOnboardingScreen(store: _store, l10n: l10n);
+      }
+      if (_store.currentUser == null) {
+        return AuthScreen(store: _store, l10n: l10n);
+      }
+    }
+
     final user = _store.currentUser;
     if (user == null) {
       return LandingScreen(store: _store, l10n: l10n);
@@ -108,5 +139,42 @@ class _CivicSetuAppState extends State<CivicSetuApp> {
       UserRole.contractor => ContractorPortalScreen(store: _store, l10n: l10n),
       UserRole.ngo => NgoPortalScreen(store: _store, l10n: l10n),
     };
+  }
+}
+
+class _AppBootstrapScreen extends StatelessWidget {
+  const _AppBootstrapScreen({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF08111E), Color(0xFF173451)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Colors.white),
+              const SizedBox(height: 16),
+              Text(
+                l10n.t('auth.sessionRestoring'),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

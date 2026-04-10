@@ -56,7 +56,9 @@ class PortalScaffold extends StatelessWidget {
           ),
           IconButton(
             tooltip: l10n.t('common.logout'),
-            onPressed: store.logout,
+            onPressed: () {
+              store.logout();
+            },
             icon: const Icon(Icons.logout_rounded),
           ),
         ],

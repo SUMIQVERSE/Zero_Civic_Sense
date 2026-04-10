@@ -2,6 +2,8 @@ import 'dart:io';
 
 enum UserRole { citizen, authority, contractor, ngo }
 
+enum AppAuthMode { demo, supabase }
+
 enum IssueCategory { road, water, electricity, sanitation }
 
 enum IssueStatus {
@@ -105,6 +107,7 @@ class AppUser {
     this.ngoName,
     this.state,
     this.city,
+    this.address,
     this.registrationId,
     this.rating,
   });
@@ -119,8 +122,101 @@ class AppUser {
   final String? ngoName;
   final String? state;
   final String? city;
+  final String? address;
   final String? registrationId;
   final double? rating;
+
+  AppUser copyWith({
+    String? id,
+    String? fullName,
+    String? email,
+    String? phone,
+    UserRole? role,
+    String? trustCode,
+    String? company,
+    String? ngoName,
+    String? state,
+    String? city,
+    String? address,
+    String? registrationId,
+    double? rating,
+  }) {
+    return AppUser(
+      id: id ?? this.id,
+      fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      role: role ?? this.role,
+      trustCode: trustCode ?? this.trustCode,
+      company: company ?? this.company,
+      ngoName: ngoName ?? this.ngoName,
+      state: state ?? this.state,
+      city: city ?? this.city,
+      address: address ?? this.address,
+      registrationId: registrationId ?? this.registrationId,
+      rating: rating ?? this.rating,
+    );
+  }
+}
+
+class ProfileSetupDraft {
+  const ProfileSetupDraft({
+    this.fullName = '',
+    this.email = '',
+    this.phone = '',
+    this.role,
+    this.state = '',
+    this.city = '',
+    this.address = '',
+    this.organizationName = '',
+    this.registrationId = '',
+  });
+
+  final String fullName;
+  final String email;
+  final String phone;
+  final UserRole? role;
+  final String state;
+  final String city;
+  final String address;
+  final String organizationName;
+  final String registrationId;
+
+  ProfileSetupDraft copyWith({
+    String? fullName,
+    String? email,
+    String? phone,
+    UserRole? role,
+    String? state,
+    String? city,
+    String? address,
+    String? organizationName,
+    String? registrationId,
+  }) {
+    return ProfileSetupDraft(
+      fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      role: role ?? this.role,
+      state: state ?? this.state,
+      city: city ?? this.city,
+      address: address ?? this.address,
+      organizationName: organizationName ?? this.organizationName,
+      registrationId: registrationId ?? this.registrationId,
+    );
+  }
+
+  bool get needsOrganizationName =>
+      role == UserRole.contractor || role == UserRole.ngo;
+
+  bool get isComplete =>
+      fullName.trim().isNotEmpty &&
+      email.trim().isNotEmpty &&
+      role != null &&
+      state.trim().isNotEmpty &&
+      city.trim().isNotEmpty &&
+      address.trim().isNotEmpty &&
+      (!needsOrganizationName || organizationName.trim().isNotEmpty);
 }
 
 class IssueReviewEvent {
@@ -509,6 +605,21 @@ IssueCategory issueCategoryFromKey(String value) {
       return IssueCategory.sanitation;
     default:
       return IssueCategory.road;
+  }
+}
+
+UserRole? userRoleFromKey(String? value) {
+  switch (value?.trim().toLowerCase()) {
+    case 'citizen':
+      return UserRole.citizen;
+    case 'authority':
+      return UserRole.authority;
+    case 'contractor':
+      return UserRole.contractor;
+    case 'ngo':
+      return UserRole.ngo;
+    default:
+      return null;
   }
 }
 
