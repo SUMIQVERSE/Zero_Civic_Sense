@@ -16,9 +16,14 @@ class ComplaintCameraResult {
 }
 
 class ComplaintCameraScreen extends StatefulWidget {
-  const ComplaintCameraScreen({super.key, required this.l10n});
+  const ComplaintCameraScreen({
+    super.key,
+    required this.l10n,
+    this.autoFetchLocation = true,
+  });
 
   final AppLocalizations l10n;
+  final bool autoFetchLocation;
 
   @override
   State<ComplaintCameraScreen> createState() => _ComplaintCameraScreenState();
@@ -36,7 +41,9 @@ class _ComplaintCameraScreenState extends State<ComplaintCameraScreen> {
   void initState() {
     super.initState();
     _initializeCamera();
-    _refreshLocation();
+    if (widget.autoFetchLocation) {
+      _refreshLocation();
+    }
   }
 
   @override
@@ -80,7 +87,11 @@ class _ComplaintCameraScreenState extends State<ComplaintCameraScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          widget.l10n.t('camera.geoFetchAlwaysOn'),
+                          widget.l10n.t(
+                            widget.autoFetchLocation
+                                ? 'camera.geoFetchAlwaysOn'
+                                : 'camera.geoFetchManual',
+                          ),
                           style: const TextStyle(color: Colors.white),
                         ),
                       ],
@@ -310,7 +321,7 @@ class _ComplaintCameraScreenState extends State<ComplaintCameraScreen> {
 
     setState(() => _capturing = true);
     try {
-      if (_locationDraft == null) {
+      if (_locationDraft == null && widget.autoFetchLocation) {
         await _refreshLocation();
       }
       final file = await controller.takePicture();

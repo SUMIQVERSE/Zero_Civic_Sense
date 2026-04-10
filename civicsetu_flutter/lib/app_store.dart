@@ -6,6 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 
 const _languageStorageKey = 'civicsetu.language';
+const _themeStorageKey = 'civicsetu.darkMode';
+const _alertsStorageKey = 'civicsetu.alerts';
+const _autoLocationStorageKey = 'civicsetu.autoLocation';
+const _aiAssistStorageKey = 'civicsetu.aiAssist';
 
 String _newId(String prefix) =>
     '$prefix-${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(9999)}';
@@ -150,6 +154,12 @@ class AppStore extends ChangeNotifier {
 
   AppUser? _currentUser;
   AppLanguage _language = AppLanguage.en;
+  bool _isDarkMode = false;
+  bool _alertsEnabled = true;
+  bool _autoLocationEnabled = true;
+  bool _aiAssistEnabled = true;
+  int _citizenInitialTabIndex = 0;
+  PendingComplaintCapture? _pendingComplaintCapture;
 
   List<AppUser> get users => List.unmodifiable(_users);
   List<Issue> get issues => List.unmodifiable(_issues);
@@ -159,12 +169,26 @@ class AppStore extends ChangeNotifier {
   List<IssueComment> get comments => List.unmodifiable(_comments);
   AppUser? get currentUser => _currentUser;
   AppLanguage get language => _language;
+  bool get isDarkMode => _isDarkMode;
+  bool get alertsEnabled => _alertsEnabled;
+  bool get autoLocationEnabled => _autoLocationEnabled;
+  bool get aiAssistEnabled => _aiAssistEnabled;
+  int get citizenInitialTabIndex => _citizenInitialTabIndex;
 
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_languageStorageKey);
+    var changed = false;
     if (stored != null) {
       _language = AppLanguageX.fromCode(stored);
+      changed = true;
+    }
+    _isDarkMode = prefs.getBool(_themeStorageKey) ?? _isDarkMode;
+    _alertsEnabled = prefs.getBool(_alertsStorageKey) ?? _alertsEnabled;
+    _autoLocationEnabled =
+        prefs.getBool(_autoLocationStorageKey) ?? _autoLocationEnabled;
+    _aiAssistEnabled = prefs.getBool(_aiAssistStorageKey) ?? _aiAssistEnabled;
+    if (changed || stored == null) {
       notifyListeners();
     }
   }
@@ -176,14 +200,56 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void loginAs(UserRole role) {
+  Future<void> setDarkMode(bool value) async {
+    _isDarkMode = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_themeStorageKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setAlertsEnabled(bool value) async {
+    _alertsEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_alertsStorageKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setAutoLocationEnabled(bool value) async {
+    _autoLocationEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoLocationStorageKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setAiAssistEnabled(bool value) async {
+    _aiAssistEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_aiAssistStorageKey, value);
+    notifyListeners();
+  }
+
+  void loginAs(UserRole role, {int citizenInitialTabIndex = 0}) {
     _currentUser = _users.firstWhere((user) => user.role == role);
+    _citizenInitialTabIndex =
+        role == UserRole.citizen ? citizenInitialTabIndex : 0;
     notifyListeners();
   }
 
   void logout() {
     _currentUser = null;
+    _citizenInitialTabIndex = 0;
+    _pendingComplaintCapture = null;
     notifyListeners();
+  }
+
+  void stageComplaintCapture(PendingComplaintCapture capture) {
+    _pendingComplaintCapture = capture;
+  }
+
+  PendingComplaintCapture? takePendingComplaintCapture() {
+    final capture = _pendingComplaintCapture;
+    _pendingComplaintCapture = null;
+    return capture;
   }
 
   AddIssueResult addIssue(Issue issue) {

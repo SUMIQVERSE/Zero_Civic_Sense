@@ -12,17 +12,18 @@ import '../models.dart';
 import '../services/auto_report_service.dart';
 import '../utils/location_service.dart';
 import '../widgets/common_widgets.dart';
-import 'complaint_camera_screen.dart';
 
 class CitizenPortalScreen extends StatefulWidget {
   const CitizenPortalScreen({
     super.key,
     required this.store,
     required this.l10n,
+    this.initialTabIndex = 0,
   });
 
   final AppStore store;
   final AppLocalizations l10n;
+  final int initialTabIndex;
 
   @override
   State<CitizenPortalScreen> createState() => _CitizenPortalScreenState();
@@ -60,11 +61,19 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
 
   bool get _isAutoSubmitArmed =>
       _autoSubmitTimer != null && (_autoSubmitCountdown ?? 0) > 0;
+  bool get _isAiAssistActive =>
+      widget.store.aiAssistEnabled && _autoReportService.isConfigured;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    final initialTabIndex = widget.initialTabIndex.clamp(0, 3);
+    _tabIndex = initialTabIndex;
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: initialTabIndex,
+    );
     _tabController.addListener(() {
       if (_tabIndex != _tabController.index) {
         setState(() => _tabIndex = _tabController.index);
@@ -82,6 +91,16 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
     ]) {
       controller.addListener(_handleManualDraftEdit);
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pendingCapture = widget.store.takePendingComplaintCapture();
+      if (!mounted || pendingCapture == null) {
+        return;
+      }
+      _handleSelectedImage(
+        imagePath: pendingCapture.imagePath,
+        locationDraft: pendingCapture.locationDraft,
+      );
+    });
   }
 
   @override
@@ -110,14 +129,6 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
       store: widget.store,
       l10n: widget.l10n,
       title: widget.l10n.t('citizen.title'),
-      floatingActionButton: FloatingActionButton.large(
-        onPressed: _openComplaintCamera,
-        backgroundColor: const Color(0xFFE8821C),
-        foregroundColor: Colors.white,
-        tooltip: widget.l10n.t('camera.open'),
-        child: const Icon(Icons.photo_camera_rounded, size: 34),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       child: Column(
         children: [
           TabBar(
@@ -364,11 +375,6 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
               label: Text(widget.l10n.t('citizen.useCurrentLocation')),
             ),
             OutlinedButton.icon(
-              onPressed: _openComplaintCamera,
-              icon: const Icon(Icons.photo_camera_rounded),
-              label: Text(widget.l10n.t('camera.open')),
-            ),
-            OutlinedButton.icon(
               onPressed: _pickImage,
               icon: const Icon(Icons.photo_library_outlined),
               label: Text(widget.l10n.t('common.pickImage')),
@@ -467,6 +473,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
 
   Widget? _buildAutoReportReviewCard() {
     final shouldShowFallbackCard = _imagePath != null &&
+        widget.store.aiAssistEnabled &&
         !_autoReportService.isConfigured &&
         !_analyzingAutoReport &&
         _analysisError == null &&
@@ -669,18 +676,15 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
               padding: const EdgeInsets.all(14),
               constraints: const BoxConstraints(maxWidth: 320),
               decoration: BoxDecoration(
-                color:
-                    bubble.$1 == youLabel
-                        ? const Color(0xFF0B1C2D)
-                        : Colors.white,
+                color: bubble.$1 == youLabel
+                    ? const Color(0xFF0B1C2D)
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Text(
                 bubble.$2,
                 style: TextStyle(
-                  color: bubble.$1 == youLabel
-                      ? Colors.white
-                      : Colors.black87,
+                  color: bubble.$1 == youLabel ? Colors.white : Colors.black87,
                 ),
               ),
             ),
@@ -804,23 +808,6 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
     );
   }
 
-  Future<void> _openComplaintCamera() async {
-    final result = await Navigator.of(context).push<ComplaintCameraResult>(
-      MaterialPageRoute(
-        builder: (context) => ComplaintCameraScreen(l10n: widget.l10n),
-      ),
-    );
-
-    if (!mounted || result == null) {
-      return;
-    }
-
-    await _handleSelectedImage(
-      imagePath: result.imagePath,
-      locationDraft: result.locationDraft,
-    );
-  }
-
   void _goToReportTab() {
     setState(() => _tabIndex = 1);
     _tabController.animateTo(1);
@@ -884,7 +871,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
       _imagePath = imagePath;
       _analysisError = null;
       _autoReportDraft = null;
-      _analyzingAutoReport = _autoReportService.isConfigured;
+      _analyzingAutoReport = _isAiAssistActive;
       _urgencyTag = UrgencyTag.high;
     });
     _goToReportTab();
@@ -892,7 +879,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
       context,
     ).showSnackBar(
         SnackBar(content: Text(widget.l10n.t('camera.photoAttached'))));
-    if (_autoReportService.isConfigured) {
+    if (_isAiAssistActive) {
       await _runAutoReportAnalysis();
     }
   }

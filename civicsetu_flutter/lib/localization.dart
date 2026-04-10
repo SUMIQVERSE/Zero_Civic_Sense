@@ -30,6 +30,7 @@ class AppLocalizations {
     'common.useSample': 'Use sample image',
     'common.refresh': 'Refresh',
     'common.language': 'Language',
+    'common.settings': 'Settings',
     'common.state': 'State',
     'common.city': 'City',
     'common.email': 'Email',
@@ -66,6 +67,7 @@ class AppLocalizations {
     'camera.open': 'Quick Camera',
     'camera.geoFetch': 'Geo Fetch',
     'camera.geoFetchAlwaysOn': 'Geo-fetch always on',
+    'camera.geoFetchManual': 'Manual location mode',
     'camera.initializing': 'Opening in-app camera...',
     'camera.unavailable': 'Camera is unavailable on this device right now.',
     'camera.captureHelp':
@@ -95,6 +97,12 @@ class AppLocalizations {
     'landing.ngo': 'NGO Login',
     'landing.enter': 'Enter Portal',
     'landing.donate': 'Donate to NGO',
+    'landing.choosePortal': 'Choose a portal',
+    'landing.portalHint': 'Select a workspace or start reporting instantly.',
+    'landing.dockPortals': 'Portals',
+    'landing.dockDonate': 'Donate',
+    'landing.dockTrack': 'Track',
+    'landing.dockSettings': 'Settings',
     'landing.description':
         'Mobile-first civic issue reporting, bidding, proof verification, NGO support, and quality analytics.',
     'landing.demoAccess': 'Demo access for {role} workflow',
@@ -164,8 +172,7 @@ class AppLocalizations {
         'Rating frozen at {score}/5 after {count} rapid reviews.',
     'citizen.accuracyMeters': 'Approx. accuracy: {meters} m',
     'citizen.chatSupport': 'CIVICSETU Support',
-    'citizen.chatWelcome':
-        'How can we help you track your civic issue today?',
+    'citizen.chatWelcome': 'How can we help you track your civic issue today?',
     'citizen.chatQuestionVerification':
         'I want to know when authority verification will happen.',
     'citizen.chatAnswerVerification':
@@ -200,12 +207,10 @@ class AppLocalizations {
     'authority.freezeReject': 'Reject review batch',
     'authority.selectBid': 'Select bid',
     'authority.noBidsYet': 'No bids yet.',
-    'authority.sendForCitizenVerification':
-        'Send for citizen verification',
+    'authority.sendForCitizenVerification': 'Send for citizen verification',
     'authority.ratingFrozenSummary':
         'Rating is frozen after {count} suspicious reviews.',
-    'authority.resolutionTrustSummary':
-        '{resolved}% resolved - {trust}% trust',
+    'authority.resolutionTrustSummary': '{resolved}% resolved - {trust}% trust',
     'contractor.title': 'Contractor Portal',
     'contractor.bids': 'Open Bids',
     'contractor.projects': 'My Projects',
@@ -228,6 +233,33 @@ class AppLocalizations {
     'ngo.analyticsSummary':
         '{resolved}% resolved - {awaiting} awaiting verification',
     'ngo.donorName': 'Donor name',
+    'donation.title': 'Support Community NGOs',
+    'donation.subtitle':
+        'Contribute directly to verified NGOs helping resolve civic issues on the ground.',
+    'donation.supportNow': 'Donate now',
+    'donation.activeNgos': 'Verified NGOs',
+    'donation.impactProjects': 'Active support',
+    'donation.resolvedProjects': 'Resolved help',
+    'donation.supporters': 'Supporters',
+    'donation.noNgos': 'No NGO profiles are available right now.',
+    'settings.title': 'App Settings',
+    'settings.subtitle':
+        'Tune the basics for reporting, alerts, and the overall app look.',
+    'settings.appearance': 'Appearance',
+    'settings.preferences': 'Preferences',
+    'settings.languageHelp': 'Choose the language used across the app.',
+    'settings.nightMode': 'Night mode',
+    'settings.nightModeSubtitle':
+        'Use a darker theme that is easier on the eyes.',
+    'settings.alerts': 'Issue alerts',
+    'settings.alertsSubtitle':
+        'Receive reminders and civic update prompts inside the app.',
+    'settings.autoLocation': 'Auto-fetch location',
+    'settings.autoLocationSubtitle':
+        'Try to attach your location automatically when opening the camera.',
+    'settings.aiAssist': 'AI report assist',
+    'settings.aiAssistSubtitle':
+        'Draft complaint details from captured images when AI is available.',
     'quality.excellent': 'Excellent',
     'quality.strong': 'Strong',
     'quality.fair': 'Fair',
@@ -498,7 +530,8 @@ class AppLocalizations {
   String portalDemoSubtitle(UserRole role) =>
       t('landing.demoAccess', {'role': roleLabel(role)});
 
-  String rupeesLabel(Object amount) => t('common.currencyRs', {'amount': amount});
+  String rupeesLabel(Object amount) =>
+      t('common.currencyRs', {'amount': amount});
 
   String roleLabel(UserRole role) => switch (role) {
         UserRole.citizen => t('landing.citizen'),

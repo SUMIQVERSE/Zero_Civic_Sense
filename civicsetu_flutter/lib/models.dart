@@ -459,6 +459,16 @@ class StateQualityRating {
   final String qualityBand;
 }
 
+class PendingComplaintCapture {
+  const PendingComplaintCapture({
+    required this.imagePath,
+    required this.locationDraft,
+  });
+
+  final String imagePath;
+  final LocationDraft? locationDraft;
+}
+
 class LocationDraft {
   const LocationDraft({
     required this.latitude,
