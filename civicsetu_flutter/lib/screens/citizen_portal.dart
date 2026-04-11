@@ -47,6 +47,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
   bool _isRecording = false;
   bool _detectingLocation = false;
   bool _analyzingAutoReport = false;
+  bool _submittingIssue = false;
   bool _programmaticDraftUpdate = false;
   String? _imagePath;
   String? _analysisError;
@@ -463,8 +464,14 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
         ],
         const SizedBox(height: 20),
         FilledButton.icon(
-          onPressed: _submitIssue,
-          icon: const Icon(Icons.send_rounded),
+          onPressed: _submittingIssue ? null : _submitIssue,
+          icon: _submittingIssue
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.send_rounded),
           label: Text(widget.l10n.t('citizen.submitIssue')),
         ),
       ],
@@ -1077,7 +1084,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
     }
   }
 
-  void _submitIssue({bool autoSubmitted = false}) {
+  Future<void> _submitIssue({bool autoSubmitted = false}) async {
     final user = widget.store.currentUser!;
     if (_titleController.text.trim().isEmpty ||
         _descriptionController.text.trim().isEmpty ||
@@ -1089,6 +1096,7 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
       );
       return;
     }
+
     final issue = Issue(
       id: 'issue-${DateTime.now().microsecondsSinceEpoch}',
       title: _titleController.text.trim(),
@@ -1118,33 +1126,60 @@ class _CitizenPortalScreenState extends State<CitizenPortalScreen>
       contractorRating: null,
       createdAt: DateTime.now(),
     );
-    final result = widget.store.addIssue(issue);
-    final message = result.merged
-        ? widget.l10n.t('citizen.duplicateMerged', {
-            'count': result.duplicateCount,
-          })
-        : autoSubmitted
-            ? widget.l10n.t('citizen.autoSubmitted')
-            : widget.l10n.t('citizen.submitted');
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    try {
+      setState(() => _submittingIssue = true);
+      final result = await widget.store.addIssue(issue);
+      if (!mounted) {
+        return;
+      }
+      final message = result.merged
+          ? widget.l10n.t('citizen.duplicateMerged', {
+              'count': result.duplicateCount,
+            })
+          : autoSubmitted
+              ? widget.l10n.t('citizen.autoSubmitted')
+              : widget.l10n.t('citizen.submitted');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
 
-    _cancelAutoSubmit(clearDraft: true);
-    _analysisError = null;
-    _analyzingAutoReport = false;
-    _urgencyTag = UrgencyTag.high;
-    _titleController.clear();
-    _descriptionController.clear();
-    _addressController.clear();
-    setState(() {
-      _imagePath = null;
-      _latitude = null;
-      _longitude = null;
-      _accuracyMeters = null;
-      _tabIndex = 0;
-    });
-    _tabController.animateTo(0);
+      _cancelAutoSubmit(clearDraft: true);
+      _analysisError = null;
+      _analyzingAutoReport = false;
+      _urgencyTag = UrgencyTag.high;
+      _titleController.clear();
+      _descriptionController.clear();
+      _addressController.clear();
+      setState(() {
+        _imagePath = null;
+        _latitude = null;
+        _longitude = null;
+        _accuracyMeters = null;
+        _tabIndex = 0;
+      });
+      _tabController.animateTo(0);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final message = _errorMessage(error);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) {
+        setState(() => _submittingIssue = false);
+      }
+    }
+  }
+
+  String _errorMessage(Object error) {
+    final message = error.toString().trim();
+    const prefix = 'Exception: ';
+    if (message.startsWith(prefix)) {
+      return message.substring(prefix.length);
+    }
+    return message;
   }
 
   String _sampleImageFor(IssueCategory category) {

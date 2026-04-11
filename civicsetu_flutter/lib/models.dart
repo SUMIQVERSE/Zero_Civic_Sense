@@ -608,6 +608,20 @@ IssueCategory issueCategoryFromKey(String value) {
   }
 }
 
+IssueStatus issueStatusFromKey(String value) {
+  switch (value.trim().toLowerCase()) {
+    case 'in_progress':
+      return IssueStatus.inProgress;
+    case 'awaiting_citizen_verification':
+      return IssueStatus.awaitingCitizenVerification;
+    case 'resolved':
+      return IssueStatus.resolved;
+    case 'open_for_bidding':
+    default:
+      return IssueStatus.openForBidding;
+  }
+}
+
 UserRole? userRoleFromKey(String? value) {
   switch (value?.trim().toLowerCase()) {
     case 'citizen':

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -13,6 +14,7 @@ const _themeStorageKey = 'civicsetu.darkMode';
 const _alertsStorageKey = 'civicsetu.alerts';
 const _autoLocationStorageKey = 'civicsetu.autoLocation';
 const _aiAssistStorageKey = 'civicsetu.aiAssist';
+const _complaintMediaBucket = 'complaint-media';
 
 String _newId(String prefix) =>
     '$prefix-${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(9999)}';
@@ -161,6 +163,15 @@ String _firstNonEmpty(Iterable<String?> values, {String fallback = ''}) {
   return fallback;
 }
 
+String _sampleImageFor(IssueCategory category) {
+  return switch (category) {
+    IssueCategory.road => _imgPothole,
+    IssueCategory.water => _imgWater,
+    IssueCategory.electricity => _imgLight,
+    IssueCategory.sanitation => _imgGarbage,
+  };
+}
+
 class AppStore extends ChangeNotifier {
   AppStore()
       : _users = _usersSeed,
@@ -233,6 +244,7 @@ class AppStore extends ChangeNotifier {
     _aiAssistEnabled = prefs.getBool(_aiAssistStorageKey) ?? _aiAssistEnabled;
     if (SupabaseConfig.isConfigured) {
       _authMode = AppAuthMode.supabase;
+      _issues = [];
       _authSubscription = supabase
           .Supabase.instance.client.auth.onAuthStateChange
           .listen((event) {
@@ -443,6 +455,7 @@ class AppStore extends ChangeNotifier {
       _currentUser = null;
       _pendingProfileDraft = null;
       _citizenInitialTabIndex = 0;
+      _issues = [];
       if (notify) {
         notifyListeners();
       }
@@ -459,6 +472,7 @@ class AppStore extends ChangeNotifier {
       if (row == null || !draft.isComplete) {
         _currentUser = null;
         _pendingProfileDraft = draft;
+        _issues = [];
       } else {
         _currentUser = _userFromProfileRow(authUser, row);
         _pendingProfileDraft = null;
@@ -467,7 +481,16 @@ class AppStore extends ChangeNotifier {
     } on supabase.PostgrestException catch (error) {
       _currentUser = null;
       _pendingProfileDraft = _draftFromAuth(authUser);
+      _issues = [];
       _authMessage = error.message;
+    }
+
+    if (_currentUser != null) {
+      try {
+        await _loadSupabaseIssues(notify: false);
+      } catch (error) {
+        _authMessage = error.toString();
+      }
     }
 
     if (notify) {
@@ -556,14 +579,230 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  Future<void> _loadSupabaseIssues({bool notify = true}) async {
+    if (!isAuthConfigured || _currentUser == null) {
+      _issues = [];
+      if (notify) {
+        notifyListeners();
+      }
+      return;
+    }
+
+    final rows = await supabase.Supabase.instance.client
+        .from('issues')
+        .select()
+        .order('created_at', ascending: false);
+
+    _issues = rows
+        .map((row) => _issueFromRow(Map<String, dynamic>.from(row as Map)))
+        .toList();
+
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  Issue _issueFromRow(Map<String, dynamic> row) {
+    final category = issueCategoryFromKey(row['category']?.toString() ?? '');
+    return Issue(
+      id: row['id']?.toString() ?? '',
+      title: _optionalText(row['title']) ?? '',
+      description: _optionalText(row['description']) ?? '',
+      category: category,
+      status: issueStatusFromKey(row['status']?.toString() ?? ''),
+      state: _optionalText(row['state']) ?? '',
+      city: _optionalText(row['city']) ?? '',
+      address: _optionalText(row['address']) ?? '',
+      latitude: _optionalDouble(row['latitude']),
+      longitude: _optionalDouble(row['longitude']),
+      createdBy: row['created_by']?.toString() ?? '',
+      assignedContractor: _optionalText(row['assigned_contractor']),
+      assignedNgo: _optionalText(row['assigned_ngo']),
+      beforeImage:
+          _optionalText(row['before_image_url']) ?? _sampleImageFor(category),
+      afterImage: _optionalText(row['after_image_url']),
+      urgencyTag: urgencyTagFromKey(row['urgency']?.toString() ?? 'high'),
+      upvotes: 0,
+      downvotes: 0,
+      overallRatingScore: _optionalDouble(row['overall_rating_score']) ?? 0,
+      isRatingFrozen: false,
+      flaggedReviewBatch: null,
+      reviewEvents: const [],
+      duplicateCount: row['duplicate_count'] is num
+          ? (row['duplicate_count'] as num).toInt()
+          : 1,
+      isSuspicious: row['is_suspicious'] == true,
+      isDuplicate: row['is_duplicate'] == true,
+      contractorRating: _optionalDouble(row['contractor_rating']),
+      createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ??
+          DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> _issueInsertPayload(
+      Issue issue, String? beforeImageUrl) {
+    return {
+      'created_by': issue.createdBy,
+      'title': issue.title.trim(),
+      'description': issue.description.trim(),
+      'category': issue.category.key,
+      'status': issue.status.key,
+      'state': issue.state.trim(),
+      'city': issue.city.trim(),
+      'address': issue.address.trim(),
+      'latitude': issue.latitude,
+      'longitude': issue.longitude,
+      'before_image_url': beforeImageUrl,
+      'after_image_url': issue.afterImage,
+      'urgency': issue.urgencyTag.key,
+      'assigned_contractor': issue.assignedContractor,
+      'assigned_ngo': issue.assignedNgo,
+      'duplicate_count': issue.duplicateCount,
+      'is_duplicate': issue.isDuplicate,
+      'is_suspicious': issue.isSuspicious,
+      'overall_rating_score': issue.overallRatingScore,
+      'contractor_rating': issue.contractorRating,
+      'created_at': issue.createdAt.toUtc().toIso8601String(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+  }
+
+  Map<String, dynamic> _issueDuplicateUpdatePayload(
+      Issue existing, Issue next) {
+    return {
+      'duplicate_count': next.duplicateCount,
+      'is_duplicate': next.isDuplicate,
+      'address': next.address.trim(),
+      'latitude': next.latitude,
+      'longitude': next.longitude,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+      'state': existing.state.trim(),
+      'city': existing.city.trim(),
+    };
+  }
+
+  Future<String?> _uploadIssueImageIfNeeded(Issue issue) async {
+    if (!isLocalFileResource(issue.beforeImage)) {
+      return null;
+    }
+
+    final file = File(issue.beforeImage);
+    final extension = _fileExtension(issue.beforeImage);
+    final storagePath =
+        'reports/${issue.createdBy}/${DateTime.now().millisecondsSinceEpoch}.$extension';
+
+    await supabase.Supabase.instance.client.storage
+        .from(_complaintMediaBucket)
+        .upload(storagePath, file);
+
+    return supabase.Supabase.instance.client.storage
+        .from(_complaintMediaBucket)
+        .getPublicUrl(storagePath);
+  }
+
+  Future<void> _insertIssueMedia(
+    String issueId,
+    String mediaUrl, {
+    required String mediaKind,
+  }) async {
+    await supabase.Supabase.instance.client.from('issue_media').insert({
+      'issue_id': issueId,
+      'media_url': mediaUrl,
+      'media_kind': mediaKind,
+    });
+  }
+
+  String _fileExtension(String path) {
+    final lastSeparator = max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    final fileName =
+        lastSeparator >= 0 ? path.substring(lastSeparator + 1) : path;
+    final lastDot = fileName.lastIndexOf('.');
+    if (lastDot < 0 || lastDot == fileName.length - 1) {
+      return 'jpg';
+    }
+    return fileName.substring(lastDot + 1).toLowerCase();
+  }
+
   @override
   void dispose() {
     _authSubscription?.cancel();
     super.dispose();
   }
 
-  AddIssueResult addIssue(Issue issue) {
+  Future<AddIssueResult> addIssue(Issue issue) async {
     final duplicate = _findDuplicate(_issues, issue);
+    if (isAuthConfigured) {
+      final currentUser = _currentUser;
+      if (currentUser == null) {
+        throw Exception('Sign in to submit a report.');
+      }
+
+      try {
+        if (duplicate != null) {
+          final raised = duplicate.duplicateCount + 1;
+          final updatedIssue = duplicate.copyWith(
+            duplicateCount: raised,
+            isDuplicate: true,
+            address: duplicate.address.length >= issue.address.length
+                ? duplicate.address
+                : issue.address,
+            latitude: duplicate.latitude ?? issue.latitude,
+            longitude: duplicate.longitude ?? issue.longitude,
+          );
+          await supabase.Supabase.instance.client
+              .from('issues')
+              .update(_issueDuplicateUpdatePayload(duplicate, updatedIssue))
+              .eq('id', duplicate.id);
+          _issues = _issues.map((existing) {
+            if (existing.id != duplicate.id) {
+              return existing;
+            }
+            return updatedIssue;
+          }).toList();
+          notifyListeners();
+          return AddIssueResult(
+            duplicateCount: raised,
+            issueId: duplicate.id,
+            merged: true,
+          );
+        }
+
+        final beforeImageUrl = await _uploadIssueImageIfNeeded(issue);
+        final insertedRow = await supabase.Supabase.instance.client
+            .from('issues')
+            .insert(_issueInsertPayload(issue, beforeImageUrl))
+            .select()
+            .maybeSingle();
+        if (insertedRow == null) {
+          throw Exception('Issue submission failed. Try again.');
+        }
+
+        final createdIssue = _issueFromRow(
+          Map<String, dynamic>.from(insertedRow),
+        );
+        if (beforeImageUrl != null) {
+          await _insertIssueMedia(
+            createdIssue.id,
+            beforeImageUrl,
+            mediaKind: 'before',
+          );
+        }
+        _issues = [createdIssue, ..._issues];
+        notifyListeners();
+        return AddIssueResult(
+          duplicateCount: createdIssue.duplicateCount,
+          issueId: createdIssue.id,
+          merged: false,
+        );
+      } on supabase.PostgrestException catch (error) {
+        _authMessage = error.message;
+        rethrow;
+      } catch (error) {
+        _authMessage = error.toString();
+        rethrow;
+      }
+    }
+
     if (duplicate == null) {
       _issues = [issue, ..._issues];
       notifyListeners();

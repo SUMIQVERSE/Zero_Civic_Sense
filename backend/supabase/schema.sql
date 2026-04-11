@@ -118,6 +118,15 @@ create table if not exists public.issue_media (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+insert into storage.buckets (id, name, public)
+values
+  ('complaint-media', 'complaint-media', true),
+  ('resolution-media', 'resolution-media', true)
+on conflict (id) do update
+set
+  name = excluded.name,
+  public = excluded.public;
+
 alter table public.profiles enable row level security;
 alter table public.issues enable row level security;
 alter table public.issue_comments enable row level security;
@@ -277,4 +286,29 @@ create policy "issue_media_insert_authenticated"
 on public.issue_media
 for insert
 to authenticated
-with check (true);
+with check (
+  exists (
+    select 1
+    from public.issues
+    where public.issues.id = public.issue_media.issue_id
+      and (
+        public.issues.created_by = auth.uid()
+        or public.issues.assigned_contractor = auth.uid()
+        or public.issues.assigned_ngo = auth.uid()
+      )
+  )
+);
+
+drop policy if exists "complaint_and_resolution_media_public_select" on storage.objects;
+create policy "complaint_and_resolution_media_public_select"
+on storage.objects
+for select
+to public
+using (bucket_id in ('complaint-media', 'resolution-media'));
+
+drop policy if exists "complaint_and_resolution_media_authenticated_insert" on storage.objects;
+create policy "complaint_and_resolution_media_authenticated_insert"
+on storage.objects
+for insert
+to authenticated
+with check (bucket_id in ('complaint-media', 'resolution-media'));
